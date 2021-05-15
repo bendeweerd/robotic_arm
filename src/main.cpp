@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <FABRIK2D.h>
 #include <stepper.h>
 
 #define base_dir_pin 10       //bottom left on A4988 driver
@@ -16,6 +17,10 @@ unsigned shoulder_max_speed = 4000;
 #define shoulder_hall_pin 3
 #define led_pin 7
 
+// Fabrik2D initialization, lengths in mm
+int lengths[] = {150, 150};
+Fabrik2D fabrik2D(3, lengths);
+
 // step_pin, dir_pin, acceleration, max_speed, microstepping resolution, gear reduction
 //TODO: find actual base reduction
 Stepper baseStepper(base_step_pin, base_dir_pin, base_acceleration, base_max_speed, 4, -4);
@@ -29,7 +34,7 @@ Stepper* steppers[NUM_STEPPERS];
   run() takes an array of stepper addresses as input
   and runs them until all movement is complete
 
-  **blocking**
+  this will block until all motors have reached their goals
 */
 void run(Stepper* steppers[]){
   while(true){    //repeat until all motors have completed
@@ -63,6 +68,9 @@ void setup()
   steppers[0] = &baseStepper;
   steppers[1] = &shoulderStepper;
 
+  //set Fabrik2D tolerance, same units as before (mm)
+  fabrik2D.setTolerance(0.5);
+
   // Zero from top to bottom to avoid collisions
   shoulderStepper.zero(shoulder_hall_pin, led_pin, -2000);
   baseStepper.zero(base_hall_pin, led_pin, 500);
@@ -73,11 +81,42 @@ void setup()
 
 void loop()
 {
-  baseStepper.setAngle(90);
-  shoulderStepper.setAngle(45);
-  run(steppers);
 
-  baseStepper.setAngle(0);
-  shoulderStepper.setAngle(0);
-  run(steppers);
+  //solve IK for positioning at (100, 100) mm
+  fabrik2D.solve(100, 100, lengths);
+
+  //get angles (in radians [-pi, pi]) and convert them to degrees [-180, 180]
+  float shoulderAngle = fabrik2D.getAngle(0) * RAD_TO_DEG;
+  float elbowAngle = fabrik2D.getAngle(1) * RAD_TO_DEG;
+
+  Serial.println("Moving End Effector to (100, 100):");
+  Serial.println("\tJoint 1 location: (" + String(fabrik2D.getX(1)) + ", " + String(fabrik2D.getY(1)) + ")");
+  Serial.println("\tJoint 2 location: (" + String(fabrik2D.getX(2)) + ", " + String(fabrik2D.getY(2)) + ")");
+  Serial.println("\tShoulder angle: " + String(shoulderAngle));
+  Serial.println("\tElbow angle: " + String(elbowAngle));
+
+  delay(2000);
+
+  //solve IK for positioning at (200, 200) mm
+  fabrik2D.solve(200, 200, lengths);
+
+  //get angles (in radians [-pi, pi]) and convert them to degrees [-180, 180]
+  shoulderAngle = fabrik2D.getAngle(0) * RAD_TO_DEG;
+  elbowAngle = fabrik2D.getAngle(1) * RAD_TO_DEG;
+
+  Serial.println("Moving End Effector to (200, 200):");
+  Serial.println("\tJoint 1 location: (" + String(fabrik2D.getX(1)) + ", " + String(fabrik2D.getY(1)) + ")");
+  Serial.println("\tJoint 2 location: (" + String(fabrik2D.getX(2)) + ", " + String(fabrik2D.getY(2)) + ")");
+  Serial.println("\tShoulder angle: " + String(shoulderAngle));
+  Serial.println("\tElbow angle: " + String(elbowAngle));
+
+  delay(2000);
+
+  // baseStepper.setAngle(90);
+  // shoulderStepper.setAngle(45);
+  // run(steppers);
+
+  // baseStepper.setAngle(0);
+  // shoulderStepper.setAngle(0);
+  // run(steppers);
 }
